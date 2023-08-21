@@ -191,7 +191,8 @@ def cg(problem, path, file_name = "mip.lp"):
     Q = problem['median_capacity']
     d = [[0 for _ in range(N)] for _ in range(N)]
     generateDistanceMatrix(problem, d)
-    print(EPS)
+    EPS = 10e-4
+    # print(EPS)
 
     lambdas = []
     constraints = []
@@ -221,7 +222,7 @@ def cg(problem, path, file_name = "mip.lp"):
     while new_column:
         count += 1
         master.optimize()
-        print(f'iter - {count} ||| obj: {master.objective_value}')
+        # print(f'iter - {count} ||| obj: {master.objective_value}')
 
         constraints_dual = []
         for i in constraints:
@@ -235,7 +236,7 @@ def cg(problem, path, file_name = "mip.lp"):
         new_column = False
         for j, pricing in enumerate(pricings):
             if pricing.objective_value < -EPS:
-                print(f'    -> pricing.objective_value: {pricing.objective_value} ||| EPS: {EPS} ||| isLess: {pricing.objective_value < -EPS}')
+                # print(f'    -> pricing.objective_value: {pricing.objective_value} ||| EPS: {EPS} ||| isLess: {pricing.objective_value < -EPS}')
                 vars = pricing.vars
 
                 coeffs = []
@@ -249,3 +250,5 @@ def cg(problem, path, file_name = "mip.lp"):
                 new_column = True
 
     print(f"  - Objective value: {master.objective_value}")
+
+    return {}, {}

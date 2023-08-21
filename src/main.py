@@ -13,7 +13,7 @@ def main():
     solutions = []
     facilities = []
     # for i in range(len(instance["problems"])):
-    for i in range(1):
+    for i in range(5):
         data_object, facilities_object = cg(instance["problems"][i], os.path.join(file_dir, f'./data/output/{file_name}/data/'), file_name)
         # solutions.append(data_object)
         # facilities.append(facilities_object)
