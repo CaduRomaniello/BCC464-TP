@@ -48,7 +48,7 @@ def generateDistanceMatrix(problem, matrix):
         for j in range(N):
             matrix[i][j] = math.floor((((problem['nodes'][i]['x'] - problem['nodes'][j]['x']) ** 2) + ((problem['nodes'][i]['y'] - problem['nodes'][j]['y']) ** 2)) ** 0.5)
 
-def solveProblem(problem, path, file_name = "mip.lp"):
+def solveCompact(problem, path):
     N = problem['num_nodes']
     p = problem['num_medians']
     q = [problem['nodes'][i]['demand'] for i in range(N)]
@@ -87,11 +87,12 @@ def solveProblem(problem, path, file_name = "mip.lp"):
 
     m.write(f"{path}{problem['problem_number']}.lp")
 
-    print(f"> Problem number: {problem['problem_number']}")
-    print(f"  - Best solution  : {problem['best_solution']}")
-    print(f"  - Objective value: {m.objective_value}")
-    print(f"  - Gap            : {abs(((problem['best_solution'] - m.objective_value)) / problem['best_solution']) * 100:.2f}%")
-    print(f"  - Execution time : {end - begin}\n")
+    # print(f"> Problem number: {problem['problem_number']}")
+    print(f"  - COMPACT FORMULATION")
+    print(f"    - Best solution  : {problem['best_solution']}")
+    print(f"    - Objective value: {m.objective_value}")
+    print(f"    - Gap            : {abs(((problem['best_solution'] - m.objective_value)) / problem['best_solution']) * 100:.2f}%")
+    print(f"    - Execution time : {end - begin}\n")
 
     data_object = {
         "problem_number": problem['problem_number'],
@@ -158,8 +159,7 @@ def plotFacilities(solutions, instance, file_name):
 
             plt.scatter(source_x, source_y, marker="o", color="red", s=15, zorder=5)
         
-        # print(os.path.dirname(os.path.realpath('__file__')))
-        plt.savefig(os.path.join(os.path.dirname(os.path.realpath('__file__')), f'./data/output/{file_name}/images/{instance["problems"][i]["problem_number"]}.png'))
+        plt.savefig(os.path.join(os.path.dirname(os.path.realpath('__file__')), f'./data/output/{file_name}/compact/images/{instance["problems"][i]["problem_number"]}.png'))
         # plt.show()
         plt.close()
     
@@ -170,11 +170,6 @@ def solvePricing(problem, reduced_cost, tao, sub, dist):
     pricing.verbose = False
     a = [pricing.add_var(f'loc{i + 1}_{sub}', var_type=BINARY) for i in range(N)]
 
-    # print(f"  - Subproblem: {sub}")
-    # print(f"  - len a: {len(a)}")
-    # print(f"  - N: {N}")
-    # print(f"  - len reduced_cost: {len(reduced_cost)}")
-    # print(f"  - len matrix: {len(dist)} - {len(dist[0])}")
     pricing += xsum((dist[i][sub] - reduced_cost[i]) * a[i] for i in range(N)) - tao
 
     pricing += xsum(problem['nodes'][i]['demand'] * a[i] for i in range(N)) <= problem['median_capacity']
@@ -184,7 +179,8 @@ def solvePricing(problem, reduced_cost, tao, sub, dist):
     return pricing
 
 # solve the optimization problem of the p demias using pythom mip and column generation
-def cg(problem, path, file_name = "mip.lp"):
+def solveCg(problem, path, file_name = "mip.lp"):
+    begin_cg = datetime.now()
     N = problem['num_nodes']
     p = problem['num_medians']
     q = [problem['nodes'][i]['demand'] for i in range(N)]
@@ -192,7 +188,6 @@ def cg(problem, path, file_name = "mip.lp"):
     d = [[0 for _ in range(N)] for _ in range(N)]
     generateDistanceMatrix(problem, d)
     EPS = 10e-4
-    # print(EPS)
 
     lambdas = []
     constraints = []
@@ -204,25 +199,23 @@ def cg(problem, path, file_name = "mip.lp"):
     # artificial variables and restrictions
     y0 = master.add_var(obj=2000, name="artificial_var")
     for i in range(N):
-        # lambdas.append(master.add_var(name=f'y{i}', obj=10000))
         constraints.append(master.add_constr(y0 == 1))
 
     r = master.add_constr(y0 * p == p)
-
-    # objective function
-    # master.optimize()
-    # print(master.objective_value)
-    # return {}, {}
 
     constraints.append(r)
 
     new_column = True
 
-    count = 0
+    iterations = 0
+    master_compuation_time = []
+    cg_compuation_time = []
     while new_column:
-        count += 1
+        iterations += 1
+
+        begin = datetime.now()
         master.optimize()
-        # print(f'iter - {count} ||| obj: {master.objective_value}')
+        master_compuation_time.append(str(datetime.now() - begin))
 
         constraints_dual = []
         for i in constraints:
@@ -234,9 +227,9 @@ def cg(problem, path, file_name = "mip.lp"):
             pricings.append(solvePricing(problem, constraints_dual, tao, sub, d))
         
         new_column = False
+        begin = datetime.now()
         for j, pricing in enumerate(pricings):
             if pricing.objective_value < -EPS:
-                # print(f'    -> pricing.objective_value: {pricing.objective_value} ||| EPS: {EPS} ||| isLess: {pricing.objective_value < -EPS}')
                 vars = pricing.vars
 
                 coeffs = []
@@ -248,7 +241,35 @@ def cg(problem, path, file_name = "mip.lp"):
                 obj = sum(d[i][j] for i in range(N) if vars[i].x > 0.5)
                 lambdas.append(master.add_var(obj=obj, column=column, name=f'lambda_{len(lambdas)}'))
                 new_column = True
+        cg_compuation_time.append(str(datetime.now() - begin))
 
-    print(f"  - Objective value: {master.objective_value}")
+    # print(f"  - Objective value: {master.objective_value}")
 
-    return {}, {}
+    print(f"  - COLUMN GENERATION")
+    print(f"    - Best solution  : {problem['best_solution']}")
+    print(f"    - Objective value: {master.objective_value}")
+    print(f"    - Gap            : {abs(((problem['best_solution'] - master.objective_value)) / problem['best_solution']) * 100:.2f}%")
+    print(f"    - Iterations     : {iterations}")
+    print(f"    - Total time: {datetime.now() - begin_cg}\n")
+
+    data_object = {
+        "problem_number": problem['problem_number'],
+        "best_solution": problem['best_solution'],
+        "objective_value": master.objective_value,
+        "gap": abs(((problem['best_solution'] - master.objective_value)) / problem['best_solution']) * 100,
+        "total_time": str(datetime.now() - begin_cg),
+        "iterations": iterations,
+        "master_compuation_time": master_compuation_time,
+        "cg_compuation_time": cg_compuation_time,
+    }
+
+    return data_object
+
+def write_cg_solutions(data, path):
+    for solution in data:
+        file_dir = os.path.join(path, f'{solution["problem_number"]}_results.json')
+
+        json_object = json.dumps(solution, indent = 4)
+
+        with open(file_dir, "w") as outfile:
+            outfile.write(json_object)
