@@ -1,3 +1,7 @@
+from datetime import datetime
+import json
+import os
+from matplotlib import pyplot as plt
 from mip import *
 
 def readFile(FILE_NAME):
@@ -41,9 +45,9 @@ def generateDistanceMatrix(problem, matrix):
     N = problem['num_nodes']
     for i in range(N):
         for j in range(N):
-            matrix[i][j] = ((problem['nodes'][i]['x'] - problem['nodes'][j]['x']) ** 2 + (problem['nodes'][i]['y'] - problem['nodes'][j]['y']) ** 2) ** 0.5
+            matrix[i][j] = (((problem['nodes'][i]['x'] - problem['nodes'][j]['x']) ** 2) + ((problem['nodes'][i]['y'] - problem['nodes'][j]['y']) ** 2)) ** 0.5
 
-def solveProblem(problem, FILE_NAME = "mip.lp"):
+def solveProblem(problem, path, file_name = "mip.lp"):
     N = problem['num_nodes']
     p = problem['num_medians']
     q = [problem['nodes'][i]['demand'] for i in range(N)]
@@ -73,13 +77,32 @@ def solveProblem(problem, FILE_NAME = "mip.lp"):
     m += xsum(y[j] for j in range(N)) == p
 
     # optimize the model
+    begin = datetime.now()
     status = m.optimize()
-    m.write(f"{FILE_NAME}.lp")
+    end = datetime.now()
 
-    print(f"Objective value: {m.objective_value}")
-    return createReturnObject(m, x, y, problem)
+    exists = os.path.exists(path)
+    if not exists:
+        os.makedirs(path)
 
-def createReturnObject(model, x, y, problem):
+    m.write(f"{path}{problem['problem_number']}.lp")
+
+    print(f"> Problem number: {problem['problem_number']}")
+    print(f"  - Best solution  : {problem['best_solution']}")
+    print(f"  - Objective value: {m.objective_value}")
+    print(f"  - Gap            : {abs(((problem['best_solution'] - m.objective_value)) / problem['best_solution']) * 100:.2f}%")
+    print(f"  - Execution time : {end - begin}\n")
+
+    data_object = {
+        "problem_number": problem['problem_number'],
+        "best_solution": problem['best_solution'],
+        "objective_value": m.objective_value,
+        "gap": abs(((problem['best_solution'] - m.objective_value)) / problem['best_solution']) * 100,
+        "execution_time": str(end - begin),
+    }
+    return data_object, createFacilitiesObject(m, x, y, problem)
+
+def createFacilitiesObject(model, x, y, problem):
     returnObject = {
         "objective_value": model.objective_value,
         "facilities": []
@@ -96,4 +119,47 @@ def createReturnObject(model, x, y, problem):
             returnObject['facilities'].append(facility)
     
     return returnObject
+
+def writeResults(path, solutions, facilities):
+    for solution in solutions:
+        file_dir = os.path.join(path, f'{solution["problem_number"]}_results.json')
+
+        json_object = json.dumps(solution, indent = 4)
+
+        with open(file_dir, "w") as outfile:
+            outfile.write(json_object)
+
+    for i in range(len(facilities)):
+        file_dir = os.path.join(path, f'{i + 1}_facilities.json')
+
+        json_object = json.dumps(facilities[i], indent = 4)
+
+        with open(file_dir, "w") as outfile:
+            outfile.write(json_object)
+
+def plotFacilities(solutions, instance, file_name):
+    # Plotando o resultado
+    for i in range(len(solutions)):
+        for j in range(len(solutions[i]['facilities'])):
+            source_x = instance["problems"][i]["nodes"][solutions[i]['facilities'][j]['node_number'] - 1]['x']
+            source_y = instance["problems"][i]["nodes"][solutions[i]['facilities'][j]['node_number'] - 1]['y']
+
+            plt.plot(source_x, source_y, color="blue", zorder=0)
+
+            for k in range(len(solutions[i]['facilities'][j]['attended_nodes'])):
+                target_x = instance["problems"][i]["nodes"][solutions[i]['facilities'][j]['attended_nodes'][k] - 1]['x']
+                target_y = instance["problems"][i]["nodes"][solutions[i]['facilities'][j]['attended_nodes'][k] - 1]['y']
+
+                x_plot = [source_x, target_x]
+                y_plot = [source_y, target_y]
+
+                plt.plot(x_plot, y_plot, color="blue", zorder=0)
+                plt.scatter(target_x, target_y, marker="o", color="green", s=15, zorder=5)
+
+            plt.scatter(source_x, source_y, marker="o", color="red", s=15, zorder=5)
+        
+        # print(os.path.dirname(os.path.realpath('__file__')))
+        plt.savefig(os.path.join(os.path.dirname(os.path.realpath('__file__')), f'./data/output/{file_name}/images/{instance["problems"][i]["problem_number"]}.png'))
+        # plt.show()
+        plt.close()
     
