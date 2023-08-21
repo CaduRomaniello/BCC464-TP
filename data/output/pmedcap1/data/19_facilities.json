@@ -1,5 +1,5 @@
 {
-    "objective_value": 1028.639020416027,
+    "objective_value": 994.0,
     "facilities": [
         {
             "node_number": 17,
@@ -20,6 +20,7 @@
             "attended_nodes": [
                 1,
                 25,
+                31,
                 44,
                 64,
                 88
@@ -114,10 +115,9 @@
             ]
         },
         {
-            "node_number": 66,
+            "node_number": 62,
             "attended_nodes": [
                 14,
-                31,
                 40,
                 62,
                 66,

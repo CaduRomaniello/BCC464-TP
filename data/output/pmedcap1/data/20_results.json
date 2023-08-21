@@ -1,7 +1,7 @@
 {
     "problem_number": 20,
     "best_solution": 1005,
-    "objective_value": 948.8522771680377,
-    "gap": 5.586838092732563,
-    "execution_time": "0:00:02.633427"
+    "objective_value": 911.0,
+    "gap": 9.35323383084577,
+    "execution_time": "0:00:02.230360"
 }
