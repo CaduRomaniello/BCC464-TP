@@ -163,3 +163,119 @@ def plotFacilities(solutions, instance, file_name):
         # plt.show()
         plt.close()
     
+# solve the optimization problem of the p demias using pythom mip and column generation
+def cg(problem, path, file_name = "mip.lp"):
+    print("a")
+
+    N = problem['num_nodes']
+    p = problem['num_medians']
+    q = [problem['nodes'][i]['demand'] for i in range(N)]
+    Q = problem['median_capacity']
+    d = [[0 for _ in range(N)] for _ in range(N)]
+
+    generateDistanceMatrix(problem, d)
+
+    # model
+    master = Model("CPMP - Geração de Colunas - Mestre", MINIMIZE, solver_name=CBC)
+    master.verbose = False
+
+    # partitions set
+    lambdas = []
+
+    # artificial variables
+    for i in range(p):
+        lambdas.append(master.add_var(name=f'y{i}', obj=10000))
+
+    # objective function
+    master.objective = xsum(lambdas[i] for i in range(p))
+
+    # Restrições #
+    pi = []
+    for i in N:
+        print('a')
+        # nao consegui pensar em como escrever a restrição utilizando os lambdas
+
+    tau = master.add_constr(xsum(lamb for lamb in lambdas) == p)
+
+    ## Problema de pricing ##
+    # Modelo de otimização #
+    pricing = Model("CPMP - Geração de Colunas - Pricing", MINIMIZE, solver_name=CBC)
+    pricing.verbose = False
+    J = 0
+
+    # Variáveis #
+    a = []
+    for i in N:
+        a.append(pricing.add_var(var_type=BINARY, name=f'a({i})({J})'))
+
+    # Restrições #
+    pricing.add_constr(xsum(problem["nodes"][i]['demand'] * a[i] for i in N) <= Q)
+
+    new_vars = True
+    old_solution = - float('inf')
+    iteration = 0
+    patience_cont = 0
+    begin = datetime.now()
+
+    while (new_vars):
+        # break if there is nothing more to add
+
+        ##########
+        # PASSO 1: resolvendo o mestre
+        ##########
+
+        master.optimize()
+        old_solution = master.objective_value
+
+        ##########
+        # PASSO 2: atualizando o pricing com os valores duais do mestre
+        ##########
+
+        # atualizando a função objetivo do pricing
+        pricing.objective = xsum((d[i][J] - pi[i].pi) * a[i] - tau.pi for i in N)
+
+        # pricing.write('pricing.lp')
+
+        # resolvendo o pricing
+        pricing.optimize()
+
+        # print_solution(master)
+        # print('pi = ', end='')
+        # print([ pis[i].pi for i in N ])
+        # print('')
+
+        # print('Pricing:')
+        # print('    z =  {pricing.objective_value}'.format(**locals()))
+        # print('    a = ', end='')
+        # print([ v.x for v in pricing.vars ])
+        # print('')
+
+        ##########
+        # PASSO 3: inserindo as novas colunas (caso alguma exista)
+        ##########
+
+        # checando se foi encontrada alguma variável com custo reduzido negativo
+        # e inserindo no mestre em caso positivo
+        if pricing.objective_value < - EPS:
+            coeffs = [ a[i].x for i in N ]
+
+            coeffs.append(1) # <---------
+            column = Column(pi, coeffs)
+
+            lambdas.append(master.add_var(column=column, name='lambda_%d' % (len(lambdas)+1)))
+
+            # print('novo padrao = {coeffs}'.format(**locals()))
+
+        # se não foi encontrada nenhuma variável atrativa, o problema foi resolvido!
+        else:
+            new_vars = False
+
+        iteration += 1
+        # pricing.write('pricing.lp')
+
+    end = datetime.now()
+
+    # Resultados #
+    print(f'> Solução ótima encontrada: {master.objective_value:.2f}')
+    print(f'> Gap: {abs(problem["best_solution"] - master.objective_value):.2f}')
+    print(f'> Tempo gasto: {end - begin}')
